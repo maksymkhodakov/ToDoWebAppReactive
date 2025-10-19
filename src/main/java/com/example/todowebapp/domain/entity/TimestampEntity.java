@@ -1,34 +1,22 @@
 package com.example.todowebapp.domain.entity;
 
-import jakarta.persistence.MappedSuperclass;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
-import lombok.EqualsAndHashCode;
+import java.time.Instant;
+
 import lombok.Getter;
 import lombok.Setter;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
-
-import java.time.LocalDateTime;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.relational.core.mapping.Column;
 
 @Getter
 @Setter
-@EqualsAndHashCode
-@MappedSuperclass
 public abstract class TimestampEntity {
-    @CreationTimestamp
-    protected LocalDateTime createDate;
 
-    @UpdateTimestamp
-    protected LocalDateTime updateDate;
+    @CreatedDate
+    @Column("create_date")
+    private Instant createDate;
 
-    @PrePersist
-    protected void onCreate() {
-        this.createDate = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        this.updateDate = LocalDateTime.now();
-    }
+    @LastModifiedDate
+    @Column("update_date")
+    private Instant updateDate;
 }

@@ -1,7 +1,6 @@
 package com.example.todowebapp.service.impl;
 
 import com.example.todowebapp.domain.dto.*;
-import com.example.todowebapp.domain.entity.Role;
 import com.example.todowebapp.domain.entity.User;
 import com.example.todowebapp.domain.enumerated.UserRole;
 import com.example.todowebapp.exceptions.ApiException;
@@ -13,15 +12,13 @@ import com.example.todowebapp.service.JwtService;
 import com.example.todowebapp.service.SecureBasicAuthenticationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.ReactiveAuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.ReactiveUserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Optional;
+import reactor.core.publisher.Mono;
 
 @Slf4j
 @Service
@@ -31,62 +28,65 @@ public class SecureBasicAuthenticationServiceImpl implements SecureBasicAuthenti
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-    private final UserDetailsService userDetailsService;
-    private final AuthenticationManager authenticationManager;
+    private final ReactiveUserDetailsService userDetailsService;
+    private final ReactiveAuthenticationManager authManager;
 
     @Override
-    public UserDTO getCurrentUser(final AuthenticationUserDetails authenticationUserDetails) {
-        return authenticationUserDetails == null ? null :
+    public Mono<UserDTO> getCurrentUser(final AuthenticationUserDetails principal) {
+        if (principal == null) return Mono.empty();
+        return Mono.just(
                 UserDTO.builder()
-                        .id(authenticationUserDetails.getUserId())
-                        .email(authenticationUserDetails.getUsername())
-                        .userRole(authenticationUserDetails.getUserRole())
-                        .privileges(authenticationUserDetails.getAuthorities())
-                        .build();
+                        .id(principal.getUserId())
+                        .email(principal.getUsername())
+                        .userRole(principal.getUserRole())
+                        .privileges(principal.getAuthorities())
+                        .build()
+        );
     }
 
     @Override
     @Transactional
-    public void register(final RegisterData data) {
-        validateUserPayload(data);
-
-        final Role role = roleRepository.findByUserRole(data.getUserRole())
-                .orElseThrow(() -> new ApiException(ErrorCode.ROLE_NOT_FOUND));
-
-        final User user = User.builder()
-                .name(data.getFirstName())
-                .lastName(data.getLastName())
-                .email(data.getEmail())
-                .password(passwordEncoder.encode(data.getPassword()))
-                .build();
-
-        role.addUser(user);
-
-        roleRepository.save(role);
-    }
-
-    private void validateUserPayload(final RegisterData data) {
+    public Mono<Void> register(final RegisterData data) {
+        // 1) validate payload (no admins)
         if (data.getUserRole() == UserRole.ROLE_ADMIN) {
-            throw new ApiException(ErrorCode.YOU_CANNOT_CREATE_AN_ADMIN_USER);
+            return Mono.error(new ApiException(ErrorCode.YOU_CANNOT_CREATE_AN_ADMIN_USER));
         }
 
-        final Optional<User> userInDb = userRepository.findByEmail(data.getEmail());
+        // 2) check user uniqueness
+        Mono<Void> ensureUnique =
+                userRepository.findByEmail(data.getEmail())
+                        .flatMap(u -> Mono.<Void>error(new ApiException(ErrorCode.USER_ALREADY_EXISTS)))
+                        .switchIfEmpty(Mono.empty());
 
-        if (userInDb.isPresent())  {
-            throw new ApiException(ErrorCode.USER_ALREADY_EXISTS);
-        }
+        // 3) find role, build user with FK, save
+        Mono<Void> createUser =
+                roleRepository.findByUserRole(data.getUserRole())
+                        .switchIfEmpty(Mono.error(new ApiException(ErrorCode.ROLE_NOT_FOUND)))
+                        .flatMap(role -> {
+                            User user = User.builder()
+                                    .name(data.getFirstName())
+                                    .lastName(data.getLastName())
+                                    .email(data.getEmail())
+                                    .password(passwordEncoder.encode(data.getPassword()))
+                                    .roleId(role.getId())     // set FK explicitly
+                                    .system(false)
+                                    .build();
+                            return userRepository.save(user).then();
+                        });
+
+        return ensureUnique.then(createUser);
     }
 
     @Override
-    public LoginResponseDTO login(final LoginData data) {
-        authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(data.getEmail(), data.getPassword()));
-
-        final UserDetails userDetails = userDetailsService.loadUserByUsername(data.getEmail());
-
-        final String token = jwtService.generateToken(userDetails);
-
-        return LoginResponseDTO.builder()
-                .token(token)
-                .build();
+    public Mono<LoginResponseDTO> login(final LoginData data) {
+        // 1) authenticate reactively
+        return authManager
+                .authenticate(new UsernamePasswordAuthenticationToken(data.getEmail(), data.getPassword()))
+                // 2) load full user details (or reuse auth.getPrincipal())
+                .flatMap(auth -> userDetailsService.findByUsername(data.getEmail()))
+                // 3) mint JWT
+                .map(jwtService::generateToken)
+                // 4) build response
+                .map(token -> LoginResponseDTO.builder().token(token).build());
     }
 }

@@ -5,137 +5,129 @@ import com.example.todowebapp.domain.entity.Todo;
 import com.example.todowebapp.domain.entity.User;
 import com.example.todowebapp.exceptions.ApiException;
 import com.example.todowebapp.exceptions.ErrorCode;
+import com.example.todowebapp.repository.TodoRepository;
 import com.example.todowebapp.repository.UserRepository;
 import com.example.todowebapp.security.AuthenticationUserDetails;
+import com.example.todowebapp.service.TodoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import com.example.todowebapp.repository.TodoRepository;
-import com.example.todowebapp.service.TodoService;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class TodoServiceImpl implements TodoService {
+
     private final UserRepository userRepository;
     private final TodoRepository todoRepository;
 
-
     /**
-     * this method is for retrieving all todos related to the user
-     * @return  list of dto
+     * Retrieve all todos for current user.
      */
     @Override
-    public List<TodoDTO> getTodos(final AuthenticationUserDetails userDetails) {
-        return todoRepository.findAllByUserId(userDetails.getUserId())
-                .stream()
-                .map(this::getTodoDTO)
-                .toList();
+    public Flux<TodoDTO> getTodos(final AuthenticationUserDetails userDetails) {
+        final Long userId = userDetails.getUserId();
+        return todoRepository.findAllByUserId(userId)
+                .map(this::toDto);
     }
 
-
     /**
-     * This method is used to create an object
-     * @return      saved dto
+     * Create a todos for current user.
      */
     @Override
     @Transactional
-    public TodoDTO createTodo(final TodoDTO todo,
-                              final AuthenticationUserDetails userDetails) {
-        final User user = getUser(userDetails);
+    public Mono<TodoDTO> createTodo(final TodoDTO dto,
+                                    final AuthenticationUserDetails userDetails) {
 
-        final Todo todoToSave = Todo.builder()
-                .description(todo.getDescription())
-                .dueDate(todo.getDueDate())
-                .checkMark(todo.isCheckMark())
-                .completionDate(todo.getCompletionDate())
-                .build();
+        final Long userId = userDetails.getUserId();
 
-        final Todo savedTodo = todoRepository.save(todoToSave);
+        // ensure user exists (and get any needed flags)
+        Mono<User> userMono = userRepository.findById(userId)
+                .switchIfEmpty(Mono.error(new ApiException(ErrorCode.USER_NOT_FOUND)));
 
-        user.addTodo(savedTodo);
-
-        userRepository.save(user);
-
-        return getTodoDTO(savedTodo);
+        return userMono.flatMap(u -> {
+            Todo entity = Todo.builder()
+                    .description(dto.getDescription())
+                    .dueDate(dto.getDueDate())
+                    .checkMark(Boolean.TRUE.equals(dto.isCheckMark()))
+                    .completionDate(dto.getCompletionDate())
+                    .userId(userId)   // set FK explicitly
+                    .build();
+            return todoRepository.save(entity).map(this::toDto);
+        });
     }
 
-
     /**
-     * This method is used for updating task information
-     * @return updated task object
+     * Update a todos. (Optionally verify ownership.)
      */
     @Override
     @Transactional
-    public TodoDTO updateTodo(final TodoDTO todo,
-                              final AuthenticationUserDetails userDetails) {
-        if (todo.getId() == null) {
-            throw new ApiException(ErrorCode.TODO_TASK_NOT_FOUND);
+    public Mono<TodoDTO> updateTodo(final TodoDTO dto,
+                                    final AuthenticationUserDetails userDetails) {
+        if (dto.getId() == null) {
+            return Mono.error(new ApiException(ErrorCode.TODO_TASK_NOT_FOUND));
+        }
+        final Long userId = userDetails.getUserId();
+
+        return todoRepository.findById(dto.getId())
+                .switchIfEmpty(Mono.error(new ApiException(ErrorCode.TODO_TASK_NOT_FOUND)))
+                // verify that this todos belongs to the current user
+                .flatMap(existing -> {
+                    if (existing.getUserId() == null || !existing.getUserId().equals(userId)) {
+                        return Mono.error(new ApiException(ErrorCode.USER_CANNOT_UPDATE_ANOTHER_USER_TODO));
+                    }
+                    existing.setDescription(dto.getDescription());
+                    existing.setCheckMark(dto.isCheckMark());
+                    existing.setDueDate(dto.getDueDate());
+                    existing.setCompletionDate(dto.getCompletionDate());
+                    return todoRepository.save(existing).map(this::toDto);
+                });
+    }
+
+    /**
+     * Delete multiple todos.
+     */
+    @Override
+    @Transactional
+    public Flux<TodoDTO> deleteTodos(final Set<Long> ids,
+                                     final AuthenticationUserDetails user) {
+        Long userId = user.getUserId();
+
+        if (ids == null || ids.isEmpty()) {
+            return Flux.empty();
         }
 
-        final Todo todoInDb = todoRepository.findById(todo.getId())
-                .orElseThrow(() -> new ApiException(ErrorCode.TODO_TASK_NOT_FOUND));
+        return todoRepository.findAllByIdInAndUserId(ids, userId)
+                .collectList()
+                .flatMapMany(found -> {
+                    if (found.isEmpty()) {
+                        return Flux.error(new ApiException("No todos found for given IDs"));
+                    }
 
-        todoInDb.setDescription(todo.getDescription());
-        todoInDb.setCheckMark(todo.isCheckMark());
-        todoInDb.setDueDate(todo.getDueDate());
-        todoInDb.setCompletionDate(todo.getCompletionDate());
+                    // Convert to DTOs *before* deletion
+                    final List<TodoDTO> deletedDTOs = found.stream()
+                            .map(this::toDto)
+                            .toList();
 
-        return getTodoDTO(todoRepository.save(todoInDb));
+                    // Delete all, then emit deleted dto
+                    return todoRepository.deleteAll(found)
+                            .thenMany(Flux.fromIterable(deletedDTOs));
+                });
     }
 
-
-    private TodoDTO getTodoDTO(final Todo todo) {
+    private TodoDTO toDto(final Todo t) {
         return TodoDTO.builder()
-                .id(todo.getId())
-                .description(todo.getDescription())
-                .dueDate(todo.getDueDate())
-                .checkMark(todo.isCheckMark())
-                .completionDate(todo.getCompletionDate())
+                .id(t.getId())
+                .description(t.getDescription())
+                .dueDate(t.getDueDate())
+                .checkMark(t.isCheckMark())
+                .completionDate(t.getCompletionDate())
                 .build();
-    }
-
-
-    /**
-     * This method is used for deletion of objects
-     *
-     * @param ids                       of tasks
-     * @param userDetails               contains authenticated user info
-     */
-    @Override
-    @Transactional
-    public void deleteTodos(final Set<Long> ids,
-                            final AuthenticationUserDetails userDetails) {
-        final User user = getUser(userDetails);
-
-        final Set<Long> userTodos = user.getTodos() == null ?
-                new HashSet<>() :
-                user.getTodos()
-                        .stream()
-                        .map(Todo::getId)
-                        .collect(Collectors.toSet());
-
-        final List<Todo> todos = todoRepository.findAllById(ids);
-
-        if (todos.size() != ids.size()) {
-            throw new ApiException(ErrorCode.TODO_TASK_NOT_FOUND);
-        }
-
-        if (!userTodos.containsAll(ids)) {
-            throw new ApiException(ErrorCode.USER_CANNOT_DELETE_ANOTHER_USER_TODO);
-        }
-
-        todoRepository.deleteAllByIdInBatch(ids);
-    }
-
-    private User getUser(final AuthenticationUserDetails userDetails) {
-        return userRepository.findById(userDetails.getUserId())
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
     }
 }

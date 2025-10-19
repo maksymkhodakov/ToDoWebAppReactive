@@ -2,10 +2,11 @@ package com.example.todowebapp.repository;
 
 import com.example.todowebapp.domain.entity.Role;
 import com.example.todowebapp.domain.enumerated.UserRole;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.r2dbc.repository.R2dbcRepository;
+import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Mono;
 
-import java.util.Optional;
-
-public interface RoleRepository extends JpaRepository<Role, Long> {
-    Optional<Role> findByUserRole(UserRole userRole);
+@Repository
+public interface RoleRepository extends R2dbcRepository<Role, Long> {
+    Mono<Role> findByUserRole(UserRole userRole);
 }

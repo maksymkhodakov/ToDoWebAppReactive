@@ -1,25 +1,20 @@
 package com.example.todowebapp.domain.entity;
 
-import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.Fetch;
-import org.hibernate.annotations.FetchMode;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
-import java.util.ArrayList;
-import java.util.List;
-
-@Getter
-@Setter
+@Getter @Setter
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-@EqualsAndHashCode(callSuper = false, exclude = {"todos", "role"})
-@Entity
-@Table(name = "users", schema = "public")
+@EqualsAndHashCode(callSuper = false)
+@Table("users")
 public class User extends TimestampEntity {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id")
+    @Column("id")
     private Long id;
 
     private String email;
@@ -28,24 +23,12 @@ public class User extends TimestampEntity {
 
     private String name;
 
+    @Column("last_name")
     private String lastName;
 
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
-    @Fetch(FetchMode.SUBSELECT)
-    private List<Todo> todos = new ArrayList<>();
+    @Column("role_id")
+    private Long roleId;     // FK to roles.id
 
-    @ManyToOne
-    @JoinColumn(name = "role_id", nullable = false)
-    private Role role;
-
-    @Column(name = "is_system")
-    private boolean system;
-
-    public void addTodo(Todo todo) {
-        if (this.todos == null) {
-            this.todos = new ArrayList<>();
-        }
-        this.todos.add(todo);
-        todo.setUser(this);
-    }
+    @Column("is_system")
+    private Boolean system;
 }

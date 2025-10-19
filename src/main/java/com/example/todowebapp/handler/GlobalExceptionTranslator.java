@@ -1,7 +1,6 @@
 package com.example.todowebapp.handler;
 
 import com.example.todowebapp.exceptions.ApiException;
-import jakarta.persistence.EntityNotFoundException;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -41,13 +40,6 @@ public class GlobalExceptionTranslator {
     public ErrorDTO handleAccessDeniedException(AccessDeniedException exception) {
         log.error("Access denied: {}", exception.getMessage(), exception);
         return new ErrorDTO(HttpStatus.FORBIDDEN, "Access denied: " + exception.getMessage());
-    }
-
-    @ExceptionHandler(value = {EntityNotFoundException.class})
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    public ErrorDTO handleEntityNotFoundException(EntityNotFoundException exception) {
-        log.error("Entity not found: {}", exception.getMessage(), exception);
-        return new ErrorDTO(HttpStatus.NOT_FOUND, "Resource not found: " + exception.getMessage());
     }
 
     @ExceptionHandler(value = {UnsupportedOperationException.class})

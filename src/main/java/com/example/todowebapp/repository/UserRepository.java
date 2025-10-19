@@ -1,10 +1,11 @@
 package com.example.todowebapp.repository;
 
 import com.example.todowebapp.domain.entity.User;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.r2dbc.repository.R2dbcRepository;
+import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Mono;
 
-import java.util.Optional;
-
-public interface UserRepository extends JpaRepository<User, Long> {
-    Optional<User> findByEmail(String email);
+@Repository
+public interface UserRepository extends R2dbcRepository<User, Long> {
+    Mono<User> findByEmail(String email);
 }

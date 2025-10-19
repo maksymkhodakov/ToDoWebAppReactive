@@ -1,7 +1,9 @@
 package com.example.todowebapp.domain.entity;
 
-import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDate;
 
@@ -10,29 +12,26 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-@EqualsAndHashCode(callSuper = false, exclude = "user")
-@Entity
-@Table(name = "todos", schema = "public")
+@EqualsAndHashCode(callSuper = false)
+@Table("todos")
 public class Todo extends TimestampEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id")
+    @Column("id")
     private Long id;
 
-    @Column(name = "description")
+    @Column("description")
     private String description;
 
-    @Column(name = "due_date")
+    @Column("due_date")
     private LocalDate dueDate;
 
-    @Column(name = "check_mark")
+    @Column("check_mark")
     private boolean checkMark;
 
-    @Column(name = "completion_date")
+    @Column("completion_date")
     private LocalDate completionDate;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
-    private User user;
+    @Column("user_id")
+    private Long userId;   // FK to users.id
 }

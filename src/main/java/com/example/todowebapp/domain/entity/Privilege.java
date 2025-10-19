@@ -1,30 +1,24 @@
 package com.example.todowebapp.domain.entity;
 
 import com.example.todowebapp.domain.enumerated.UserPrivilege;
-import jakarta.persistence.*;
 import lombok.*;
-
-import java.util.ArrayList;
-import java.util.List;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-@EqualsAndHashCode(callSuper = false, exclude = "roles")
-@Entity
-@Table(name = "privileges", schema = "public")
+@EqualsAndHashCode(callSuper = false)
+@Table("privileges")
 public class Privilege extends TimestampEntity {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id")
+    @Column("id")
     private Long id;
 
-    @Column(name = "user_privilege")
-    @Enumerated(value = EnumType.STRING)
+    @Column("user_privilege")
     private UserPrivilege userPrivilege;
-
-    @ManyToMany(mappedBy = "privileges")
-    private List<Role> roles = new ArrayList<>();
 }
