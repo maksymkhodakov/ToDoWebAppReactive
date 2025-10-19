@@ -54,8 +54,15 @@ public class SecurityFilterConfig {
                 .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
 
                 .authorizeExchange(ex -> ex
-                        .pathMatchers("/api/me", "/api/register", "/api/login",
-                                "/swagger-ui/**", "/api-docs*/**").permitAll()
+                        .pathMatchers(
+                                "/api/me",
+                                "/api/register",
+                                "/api/login",
+                                "/swagger-ui/**",
+                                "/api-docs*/**",
+                                "/v3/api-docs/**",
+                                "/webjars/**"
+                        ).permitAll()
                         .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyExchange().authenticated()
                 )
