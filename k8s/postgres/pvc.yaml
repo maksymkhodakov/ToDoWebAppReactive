@@ -1,0 +1,3 @@
+# DEPRECATED — PVC is now created automatically by the StatefulSet
+# volumeClaimTemplates defined in statefulset.yaml.
+# This file is kept for reference only and should NOT be applied.
