@@ -1,0 +1,10 @@
+# DEPRECATED — replaced by statefulset.yaml
+#
+# A StatefulSet is used instead of a Deployment for postgres because:
+#   - It provides stable, unique pod DNS names (postgres-0.postgres-headless)
+#   - It manages its own PVC lifecycle via volumeClaimTemplates
+#   - It guarantees ordered, graceful pod termination
+#
+# Apply statefulset.yaml + headless-service.yaml instead of this file.
+# The postgres-pvc.yaml is also no longer needed; the StatefulSet creates
+# PVCs automatically from its volumeClaimTemplates.
