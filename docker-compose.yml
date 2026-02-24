@@ -15,6 +15,11 @@ services:
       - POSTGRES_PASSWORD=${MAIN_DB_PASSWORD}
       - POSTGRES_USER=${MAIN_DB_USER}
       - POSTGRES_DB=${MAIN_DB_NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MAIN_DB_USER} -d ${MAIN_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks:
       - todo-net
 
@@ -26,7 +31,8 @@ services:
     ports:
       - ${BACKEND_PORT}:${BACKEND_PORT}
     depends_on:
-      - postgres-db
+      postgres-db:
+        condition: service_healthy
     environment:
       DB_HOST: postgres-db
       DB_PORT: ${MAIN_DB_PORT}
